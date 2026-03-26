@@ -28,3 +28,8 @@ pytest -v "${REPO_ROOT}"
 
 echo ""
 echo "=== Setup complete ==="
+echo ""
+echo "To start the Base44 integration API server:"
+echo "  uvicorn api.main:app --reload --port 8000"
+echo ""
+echo "Interactive docs are then available at http://localhost:8000/docs"
