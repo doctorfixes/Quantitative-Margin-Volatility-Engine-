@@ -10,7 +10,7 @@ import os
 import sys
 import types
 from datetime import date, timedelta
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 
 # ---------------------------------------------------------------------------
