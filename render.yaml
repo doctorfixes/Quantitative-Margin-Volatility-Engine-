@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: axiom-60-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn scripts.api:app --host 0.0.0.0 --port $PORT --workers 2
+    envVars:
+      - key: AXIOM_API_KEY
+        sync: false
+      - key: AXIOM_CORS_ORIGINS
+        sync: false
+    healthCheckPath: /health

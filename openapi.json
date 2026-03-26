@@ -1,0 +1,108 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AXIOM-60 Volatility Engine",
+    "version": "1.0.0"
+  },
+  "servers": [{"url": "https://YOUR-DEPLOYED-URL.railway.app"}],
+  "security": [{"ApiKeyAuth": []}],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "healthCheck",
+        "summary": "Liveness check",
+        "security": [],
+        "responses": {"200": {"description": "OK"}}
+      }
+    },
+    "/classify": {
+      "post": {
+        "operationId": "classifyMatchup",
+        "summary": "Classify a single matchup",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/MatchupInput"}
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Result"},
+          "401": {"description": "Unauthorized"}
+        }
+      }
+    },
+    "/classify/batch": {
+      "post": {
+        "operationId": "classifyBatch",
+        "summary": "Classify full slate (max 100)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["matchups"],
+                "properties": {
+                  "matchups": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "items": {"$ref": "#/components/schemas/MatchupInput"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Batch result"},
+          "401": {"description": "Unauthorized"}
+        }
+      }
+    },
+    "/metrics": {
+      "post": {
+        "operationId": "computeMetrics",
+        "summary": "Compute BA_Gap and Abs_Edge",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["fav_adj_em", "dog_adj_em", "spread"],
+                "properties": {
+                  "fav_adj_em": {"type": "number"},
+                  "dog_adj_em": {"type": "number"},
+                  "spread": {"type": "number"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Metrics"},
+          "401": {"description": "Unauthorized"}
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "x-api-key"}
+    },
+    "schemas": {
+      "MatchupInput": {
+        "type": "object",
+        "required": ["fav_adj_em", "dog_adj_em", "spread", "ou"],
+        "properties": {
+          "fav_adj_em": {"type": "number"},
+          "dog_adj_em": {"type": "number"},
+          "spread": {"type": "number"},
+          "ou": {"type": "number"}
+        }
+      }
+    }
+  }
+}
