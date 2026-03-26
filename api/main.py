@@ -1,20 +1,41 @@
 """
 api/main.py — FastAPI application that bridges the AXIOM-60 engine to Base44.
 
+Base44 app : Axiom-60  (https://app.base44.com/apps/69c3204219e8e63b63a9e14e/editor)
 Base44 (https://base44.com) calls this service as an external integration via
 its auto-generated REST connector.  Every endpoint returns JSON that Base44's
 SDK can consume directly.
+
+When the ``BASE44_API_KEY`` environment variable is set, classification results
+are automatically pushed to the Matchup entity inside the Base44 app.
 
 Start locally:
     uvicorn api.main:app --reload --port 8000
 """
 
-from typing import List
+import logging
+import os
+from typing import List, Optional
 
+import httpx
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
+from api.base44_client import Base44AuthError, Base44Client
 from scripts.axiom60 import classify, compute_metrics
+
+logger = logging.getLogger(__name__)
+
+
+def _get_base44_client() -> Optional[Base44Client]:
+    """Return a Base44Client when BASE44_API_KEY is set, else None."""
+    if os.environ.get("BASE44_API_KEY"):
+        try:
+            return Base44Client.from_env()
+        except Base44AuthError:
+            pass
+    return None
+
 
 app = FastAPI(
     title="AXIOM-60 API",
@@ -84,17 +105,39 @@ def metrics(req: MatchupRequest) -> MetricsResponse:
 def classify_single(req: MatchupRequest) -> ClassifyResponse:
     """Run the AXIOM-60 five-gate filter chain against one matchup and return
     the signal classification.  This is the primary endpoint consumed by a
-    Base44 app's backend function or automation trigger."""
+    Base44 app's backend function or automation trigger.
+
+    When ``BASE44_API_KEY`` is set the result is also written to the Matchup
+    entity inside the Base44 Axiom-60 app.
+    """
     result = classify(req.fav_adj_em, req.dog_adj_em, req.spread, req.ou)
-    return ClassifyResponse(**result)
+    response = ClassifyResponse(**result)
+    client = _get_base44_client()
+    if client is not None:
+        try:
+            client.create_matchup(response.model_dump())
+        except (httpx.HTTPError, Base44AuthError) as exc:
+            logger.warning("Base44 push failed: %s", exc)
+    return response
 
 
 @app.post("/classify/batch", response_model=BatchResponse, summary="Classify multiple matchups")
 def classify_batch(req: BatchRequest) -> BatchResponse:
     """Run the filter chain across a list of matchups in a single request.
-    Useful for seeding a Base44 data entity with a full slate of games."""
+    Useful for seeding a Base44 data entity with a full slate of games.
+
+    When ``BASE44_API_KEY`` is set every result is also written to the Matchup
+    entity inside the Base44 Axiom-60 app.
+    """
     results = [
         ClassifyResponse(**classify(e.fav_adj_em, e.dog_adj_em, e.spread, e.ou))
         for e in req.entries
     ]
+    client = _get_base44_client()
+    if client is not None:
+        for row in results:
+            try:
+                client.create_matchup(row.model_dump())
+            except (httpx.HTTPError, Base44AuthError) as exc:
+                logger.warning("Base44 push failed: %s", exc)
     return BatchResponse(results=results)
