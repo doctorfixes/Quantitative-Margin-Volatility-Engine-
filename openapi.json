@@ -1,0 +1,141 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "AXIOM-60",
+    "description": "Quantitative Margin-Volatility Engine — deterministic filter chain for spread-adjusted efficiency analysis.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://your-app.up.railway.app",
+      "description": "Production (Railway)"
+    }
+  ],
+  "paths": {
+    "/classify": {
+      "post": {
+        "summary": "Classify a matchup",
+        "description": "Run the AXIOM-60 five-gate filter chain against a single matchup entry. Returns the signal tier (BET / PASS) with the triggering reason and computed metrics.",
+        "operationId": "classifyMatchup",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchupIn"
+              },
+              "examples": {
+                "bet_edge": {
+                  "summary": "BET — Edge threshold met",
+                  "value": {
+                    "fav_adj_em": 22.0,
+                    "dog_adj_em": 12.0,
+                    "spread": -8.0,
+                    "ou": 138.0
+                  }
+                },
+                "pass_tempo": {
+                  "summary": "PASS — Tempo filter",
+                  "value": {
+                    "fav_adj_em": 25.0,
+                    "dog_adj_em": 15.0,
+                    "spread": -8.0,
+                    "ou": 152.0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Classification result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassifyOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — invalid or missing API key"
+          },
+          "422": {
+            "description": "Validation error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "MatchupIn": {
+        "type": "object",
+        "required": ["fav_adj_em", "dog_adj_em", "spread", "ou"],
+        "properties": {
+          "fav_adj_em": {
+            "type": "number",
+            "description": "Favorite adjusted efficiency margin"
+          },
+          "dog_adj_em": {
+            "type": "number",
+            "description": "Underdog adjusted efficiency margin"
+          },
+          "spread": {
+            "type": "number",
+            "description": "Posted spread (negative favors the favorite)"
+          },
+          "ou": {
+            "type": "number",
+            "description": "Over/under total"
+          }
+        }
+      },
+      "ClassifyOut": {
+        "type": "object",
+        "required": ["signal", "reason", "ba_gap", "abs_edge", "spread", "ou"],
+        "properties": {
+          "signal": {
+            "type": "string",
+            "enum": ["BET", "PASS"],
+            "description": "Output signal tier"
+          },
+          "reason": {
+            "type": "string",
+            "enum": ["Edge", "LIVE DOG", "Tempo", "SpreadCap", "Standard"],
+            "description": "Filter gate that produced the signal"
+          },
+          "ba_gap": {
+            "type": "number",
+            "description": "FavAdjEM − DogAdjEM"
+          },
+          "abs_edge": {
+            "type": "number",
+            "description": "|BA_Gap − |Spread||"
+          },
+          "spread": {
+            "type": "number",
+            "description": "Echo of the input spread"
+          },
+          "ou": {
+            "type": "number",
+            "description": "Echo of the input O/U"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    }
+  }
+}
