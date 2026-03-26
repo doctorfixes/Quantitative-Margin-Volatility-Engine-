@@ -146,6 +146,20 @@ class TestMain:
 
         assert os.path.exists(output_path)
 
+    def test_main_writes_empty_csv_when_fetch_raises(self, tmp_path):
+        """main() should write an empty CSV and exit cleanly when fetch raises."""
+        pd_stub = _make_pandas_stub()
+        pybaseball_stub = _make_pybaseball_stub()
+        pybaseball_stub.statcast.side_effect = ConnectionError("network unavailable")
+
+        mod = _import_module(pd_stub, pybaseball_stub)
+
+        output_path = str(tmp_path / "latest_statcast.csv")
+        with patch.object(mod, "OUTPUT_PATH", output_path):
+            mod.main()  # must not raise
+
+        assert os.path.exists(output_path)
+
 
 class TestOutputPath:
     """Tests for the module-level OUTPUT_PATH constant."""
