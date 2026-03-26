@@ -2,7 +2,7 @@
 AXIOM-60 Filter Chain — Validation Tests
 Covers every gate + boundary edge cases.
 """
-from scripts.axiom60 import classify, compute_metrics
+from scripts.axiom60 import classify, compute_metrics, filter_active_slate
 
 
 # -- Metric computation --
@@ -123,3 +123,36 @@ class TestGatePriority:
         """Even with huge edge, SpreadCap fires first"""
         result = classify(40.0, 5.0, -26.0, 130)
         assert result["reason"] == "SpreadCap"
+
+
+# -- Active slate filter --
+
+class TestActiveSlateFilter:
+    def test_bet_signal_included(self):
+        games = [{"signal": "BET"}, {"signal": "PASS"}]
+        result = filter_active_slate(games)
+        assert result == [{"signal": "BET"}]
+
+    def test_featured_game_included(self):
+        games = [{"signal": "PASS", "is_featured": True}, {"signal": "PASS"}]
+        result = filter_active_slate(games)
+        assert result == [{"signal": "PASS", "is_featured": True}]
+
+    def test_bet_and_featured_both_included(self):
+        bet = {"signal": "BET"}
+        featured = {"signal": "PASS", "is_featured": True}
+        excluded = {"signal": "PASS"}
+        result = filter_active_slate([bet, featured, excluded])
+        assert result == [bet, featured]
+
+    def test_empty_list_returns_empty(self):
+        assert filter_active_slate([]) == []
+
+    def test_no_bet_no_featured_returns_empty(self):
+        games = [{"signal": "PASS"}, {"signal": "PASS", "is_featured": False}]
+        assert filter_active_slate(games) == []
+
+    def test_is_featured_false_not_included(self):
+        """is_featured=False must not override PASS signal"""
+        games = [{"signal": "PASS", "is_featured": False}]
+        assert filter_active_slate(games) == []

@@ -55,3 +55,11 @@ def classify(fav_adj_em: float, dog_adj_em: float, spread: float, ou: float) -> 
         "spread": spread,
         "ou": ou,
     }
+
+
+def filter_active_slate(games: list) -> list:
+    """
+    Simplified view filter: return only games where signal is 'BET'
+    or the game is marked as featured (is_featured=True).
+    """
+    return [g for g in games if g.get("signal") == "BET" or g.get("is_featured")]
