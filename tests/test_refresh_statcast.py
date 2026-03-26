@@ -48,21 +48,56 @@ def _make_pybaseball_stub(return_value=None):
 def _import_module(pandas_stub, pybaseball_stub):
     """Import (or re-import) refresh_statcast with the given stubs injected."""
     module_name = "refresh_statcast"
-    # Remove cached version so we get a fresh import each time.
-    sys.modules.pop(module_name, None)
-    sys.modules["pandas"] = pandas_stub
-    sys.modules["pybaseball"] = pybaseball_stub
 
+    # Determine the scripts directory where refresh_statcast.py lives.
     scripts_dir = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"
     )
-    if scripts_dir not in sys.path:
-        sys.path.insert(0, scripts_dir)
 
-    module = importlib.import_module(module_name)
-    return module
+    # Save prior module and path state so we can restore it after import.
+    old_refresh_module = sys.modules.get(module_name)
+    old_pandas = sys.modules.get("pandas")
+    old_pybaseball = sys.modules.get("pybaseball")
+    path_was_modified = False
 
+    try:
+        # Remove cached version so we get a fresh import each time.
+        sys.modules.pop(module_name, None)
+        sys.modules["pandas"] = pandas_stub
+        sys.modules["pybaseball"] = pybaseball_stub
 
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+            path_was_modified = True
+
+        module = importlib.import_module(module_name)
+        return module
+    finally:
+        # Restore pandas module.
+        if old_pandas is not None:
+            sys.modules["pandas"] = old_pandas
+        else:
+            sys.modules.pop("pandas", None)
+
+        # Restore pybaseball module.
+        if old_pybaseball is not None:
+            sys.modules["pybaseball"] = old_pybaseball
+        else:
+            sys.modules.pop("pybaseball", None)
+
+        # Restore prior refresh_statcast module, if any.
+        if old_refresh_module is not None:
+            sys.modules[module_name] = old_refresh_module
+        else:
+            sys.modules.pop(module_name, None)
+
+        # Undo sys.path modification performed for this import.
+        if path_was_modified:
+            try:
+                sys.path.remove(scripts_dir)
+            except ValueError:
+                # scripts_dir was not in sys.path; nothing to do.
+                pass
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
