@@ -1,0 +1,65 @@
+name: Axiom-60 Statcast Refresh
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # Daily at 08:00 UTC (fixed; local offset varies with DST)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Scraper
+        id: scraper
+        run: python scripts/refresh_statcast.py
+        env:
+          PYTHONUNBUFFERED: "1"
+        continue-on-error: true
+
+      - name: Retry Scraper on Failure
+        if: steps.scraper.outcome == 'failure'
+        run: |
+          echo "First attempt failed. Retrying in 60 seconds..."
+          sleep 60
+          python scripts/refresh_statcast.py
+        env:
+          PYTHONUNBUFFERED: "1"
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "Axiom-60-Bot"
+          git config --global user.email "bot@axiom60.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "No changes detected. Skipping commit."
+          else
+            git commit -m "Automated Statcast Update: $(date +'%Y-%m-%d')"
+            git push
+            echo "Changes committed and pushed."
+          fi
