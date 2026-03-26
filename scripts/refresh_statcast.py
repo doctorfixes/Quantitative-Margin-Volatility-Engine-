@@ -28,7 +28,11 @@ def fetch_latest_statcast() -> pd.DataFrame:
 
 def main() -> None:
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-    df = fetch_latest_statcast()
+    try:
+        df = fetch_latest_statcast()
+    except OSError as exc:
+        print(f"Failed to fetch Statcast data: {exc}")
+        df = None
     if df is None or df.empty:
         print("No Statcast data returned for the requested date.")
         # Write an empty file so the commit step does not fail on a missing path.
