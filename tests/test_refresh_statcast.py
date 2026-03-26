@@ -114,9 +114,12 @@ class TestFetchLatestStatcast:
 
         mod = _import_module(pd_stub, pybaseball_stub)
 
-        result = mod.fetch_latest_statcast()
+        # Use a fixed "today" to avoid flakiness around midnight.
+        fixed_today = date(2023, 1, 15)
+        with patch.object(mod.date, "today", return_value=fixed_today):
+            result = mod.fetch_latest_statcast()
 
-        yesterday = date.today() - timedelta(days=1)
+        yesterday = fixed_today - timedelta(days=1)
         expected_date_str = yesterday.strftime("%Y-%m-%d")
         pybaseball_stub.statcast.assert_called_once_with(
             start_dt=expected_date_str, end_dt=expected_date_str
