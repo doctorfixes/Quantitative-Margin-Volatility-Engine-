@@ -1,6 +1,6 @@
 # AXIOM-60
 
-**Quantitative Margin-Volatility Engine**
+**Quantitative Margin-Volatility Engine — 2026 Tournament Edition**
 
 A production-ready pipeline for processing high-variance time-series data to identify efficiency margins and predictive stress points.
 
@@ -8,7 +8,7 @@ A production-ready pipeline for processing high-variance time-series data to ide
 
 ## Overview
 
-AXIOM-60 is a quantitative filtering engine that evaluates structured matchup data against spread-adjusted efficiency differentials. It ingests paired statistical profiles, computes margin gaps, and classifies each entry through a deterministic filter chain — outputting actionable signal tiers with zero ambiguity.
+AXIOM-60 is a quantitative filtering engine that evaluates structured matchup data against spread-adjusted efficiency differentials. It ingests **dual-source** paired statistical profiles, computes averaged margin gaps, and classifies each entry through a deterministic filter chain — outputting actionable signal tiers with zero ambiguity.
 
 The engine is designed for speed, clarity, and repeatability. No discretionary overrides. No manual adjustments. Every output traces directly to the filter logic.
 
@@ -16,27 +16,27 @@ The engine is designed for speed, clarity, and repeatability. No discretionary o
 
 ## Core Metrics
 
-|Metric    |Definition                                                                   |
-|----------|-----------------------------------------------------------------------------|
-|`BA_Gap`  |`FavAdjEM − DogAdjEM` — raw adjusted efficiency margin between paired entries|
-|`Abs_Edge`|`                                                                            |
+|Metric      |Definition                                                                              |
+|------------|----------------------------------------------------------------------------------------|
+|`BA_Gap`    |`((FavKP − DogKP) + (FavTV − DogTV)) / 2` — averaged efficiency margin from two sources|
+|`Abs_Edge`  |`\|BA_Gap − \|Spread\|\|` — spread-adjusted efficiency delta                           |
+|`Strength`  |`min(99.9, Abs_Edge × 12.5 + (148.0 − O/U))` — confidence index for BET signals (0–99.9)|
 
 -----
 
 ## Filter Chain
 
-AXIOM-60 applies a fixed five-gate filter sequence. Each entry is evaluated top-down — first match exits.
+AXIOM-60 applies a fixed three-gate filter sequence. Each entry is evaluated top-down — first match exits.
 
 ```
-1. O/U > 148          → PASS (Tempo)
-2. |Spread| > 24.5     → PASS (SpreadCap)
-3. Abs_Edge ≥ 1.5      → BET
-4. Abs_Edge ≥ 1.0
-   AND BA_Gap < |Spread| → BET (LIVE DOG)
-5. else                → PASS
+1. O/U > 148          → PASS (TEMPO_OVERFLOW)
+2. Abs_Edge ≥ 1.5      → BET
+3. Abs_Edge ≥ 1.0
+   AND BA_Gap < |Spread| → BET (LIVE_DOG)
+4. else                → PASS
 ```
 
-No PK zone. No Conflict gate. No Auto-DOG. No Dead Zone. No star tiers. No discretionary overrides.
+No SpreadCap gate. No discretionary overrides.
 
 -----
 
@@ -45,24 +45,23 @@ No PK zone. No Conflict gate. No Auto-DOG. No Dead Zone. No star tiers. No discr
 |Signal            |Color Code|Meaning                              |
 |------------------|----------|-------------------------------------|
 |`BET`             |Green     |Efficiency edge meets threshold      |
-|`LIVE DOG`        |Purple    |Moderate edge with underdog alignment|
-|`PASS (Tempo)`    |Orange    |Filtered out — pace/environment flag |
-|`PASS (SpreadCap)`|Orange    |Filtered out — spread exceeds cap    |
+|`BET (LIVE_DOG)`  |Purple    |Moderate edge with underdog alignment|
+|`PASS (TEMPO_OVERFLOW)`|Orange|Filtered out — pace/environment flag |
 |`PASS`            |Gray      |No actionable edge detected          |
 
 -----
 
 ## Styling Spec
 
-|Element           |Value                      |
-|------------------|---------------------------|
-|Font              |Arial                      |
-|Headers           |Navy background, white text|
-|Row shading       |Alternating light/white    |
-|BET rows          |Green fill                 |
-|LIVE DOG rows     |Purple fill                |
-|Filter PASS rows  |Orange fill                |
-|Standard PASS rows|Gray fill                  |
+|Element                  |Value                      |
+|-------------------------|---------------------------|
+|Font                     |Arial                      |
+|Headers                  |Navy background, white text|
+|Row shading              |Alternating light/white    |
+|BET rows                 |Green fill                 |
+|LIVE_DOG rows            |Purple fill                |
+|TEMPO_OVERFLOW PASS rows |Orange fill                |
+|Standard PASS rows       |Gray fill                  |
 
 -----
 
@@ -71,28 +70,29 @@ No PK zone. No Conflict gate. No Auto-DOG. No Dead Zone. No star tiers. No discr
 ```
 ┌──────────────────────────────────┐
 │         Raw Input Data           │
-│  (Paired efficiency profiles +   │
+│  (Dual efficiency profiles +     │
 │   spread + O/U)                  │
 └──────────────┬───────────────────┘
                │
                ▼
 ┌──────────────────────────────────┐
 │       Metric Computation         │
-│  BA_Gap = FavAdjEM − DogAdjEM    │
+│  BA_Gap = avg(KP_diff, TV_diff)  │
 │  Abs_Edge = |BA_Gap − |Spread||  │
 └──────────────┬───────────────────┘
                │
                ▼
 ┌──────────────────────────────────┐
 │     Deterministic Filter Chain   │
-│  5-gate sequential evaluation    │
+│  3-gate sequential evaluation    │
 │  First match exits               │
 └──────────────┬───────────────────┘
                │
                ▼
 ┌──────────────────────────────────┐
 │       Classified Output          │
-│  Signal + Color Code + Metrics   │
+│  Signal + Strength + Metrics     │
+│  + AUDIT_SEAL                    │
 │  → Excel / HTML                  │
 └──────────────────────────────────┘
 ```
@@ -106,12 +106,16 @@ AXIOM-60 requires manually sourced efficiency data (AdjEM values are paywalled).
 **Input requirements per entry:**
 
 - Favorite and Dog team identifiers
-- `FavAdjEM` and `DogAdjEM` (adjusted efficiency margin)
+- `FavKP` and `DogKP` (KenPom adjusted efficiency margin)
+- `FavTV` and `DogTV` (secondary efficiency metric, e.g. TeamRankings)
 - `Spread` (posted line)
 - `O/U` (over/under total)
 
 **Output:**
 
+- `signal` — `BET`, `BET (LIVE_DOG)`, or `PASS`
+- `strength` — confidence index 0–99.9 (non-zero for BET signals only)
+- `audit_seal` — `AXIOM_VERIFIED_2026`
 - Formatted Excel workbook with signal classification and color coding
 - Optional HTML bracket or dashboard visualization
 
@@ -128,7 +132,7 @@ AXIOM-60 requires manually sourced efficiency data (AdjEM values are paywalled).
 
 ## Version
 
-**AXIOM-60** — current and locked. No version suffix. No forks.
+**AXIOM-60** — 2026 Tournament Edition. No forks.
 
 -----
 
