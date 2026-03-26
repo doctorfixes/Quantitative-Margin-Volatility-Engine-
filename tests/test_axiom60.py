@@ -2,7 +2,15 @@
 AXIOM-60 Filter Chain — Validation Tests
 Covers every gate + boundary edge cases.
 """
-from scripts.axiom60 import classify, compute_metrics
+import pytest
+from scripts.axiom60 import (
+    REGIME_DECAY,
+    apply_regime_decay,
+    classify,
+    cleanup_tickers,
+    compute_metrics,
+    register_ticker,
+)
 
 
 # -- Metric computation --
@@ -123,3 +131,111 @@ class TestGatePriority:
         """Even with huge edge, SpreadCap fires first"""
         result = classify(40.0, 5.0, -26.0, 130)
         assert result["reason"] == "SpreadCap"
+
+
+# -- Regime Decay (0.97x) --
+
+class TestRegimeDecay:
+    def test_regime_decay_constant(self):
+        assert REGIME_DECAY == 0.97
+
+    def test_apply_regime_decay(self):
+        assert apply_regime_decay(20.0) == pytest.approx(19.4)
+
+    def test_tournament_regime_shrinks_ba_gap(self):
+        """AdjEM values are scaled by 0.97 before computing metrics."""
+        base = classify(22.0, 12.0, -8.0, 138)
+        regime = classify(22.0, 12.0, -8.0, 138, tournament_regime=True)
+        # decayed ba_gap = (22*0.97 - 12*0.97) = 10*0.97 = 9.7
+        assert regime["ba_gap"] == pytest.approx(9.7)
+        assert regime["ba_gap"] < base["ba_gap"]
+
+    def test_tournament_regime_false_by_default(self):
+        """Default behavior is unchanged when tournament_regime is omitted."""
+        result_default = classify(22.0, 12.0, -8.0, 138)
+        result_explicit = classify(22.0, 12.0, -8.0, 138, tournament_regime=False)
+        assert result_default == result_explicit
+
+    def test_regime_decay_can_flip_classification(self):
+        """Decay reducing abs_edge below 1.5 threshold changes BET/Edge → PASS/Standard."""
+        # Without decay: ba_gap=6.5, abs_edge=|6.5-5.0|=1.5 → BET/Edge
+        base = classify(20.0, 13.5, -5.0, 140)
+        assert base["signal"] == "BET"
+        assert base["reason"] == "Edge"
+        # With decay: fav=19.4, dog=13.095, ba_gap=6.305, abs_edge=|6.305-5.0|=1.305 → PASS/Standard
+        # ba_gap(6.305) >= |spread|(5.0) so LIVE DOG doesn't fire either
+        regime = classify(20.0, 13.5, -5.0, 140, tournament_regime=True)
+        assert regime["signal"] == "PASS"
+        assert regime["reason"] == "Standard"
+
+
+# -- Ticker Memory Cleanup --
+
+class TestTickerMemory:
+    def setup_method(self):
+        """Ensure a clean slate before every test."""
+        cleanup_tickers()
+
+    def test_register_and_cleanup(self):
+        result = classify(22.0, 12.0, -8.0, 138)
+        register_ticker("TEAM_A_vs_TEAM_B", result)
+        removed = cleanup_tickers()
+        assert removed == 1
+
+    def test_cleanup_returns_zero_when_empty(self):
+        assert cleanup_tickers() == 0
+
+    def test_cleanup_removes_multiple_tickers(self):
+        register_ticker("GAME1", {"signal": "BET"})
+        register_ticker("GAME2", {"signal": "PASS"})
+        register_ticker("GAME3", {"signal": "BET"})
+        removed = cleanup_tickers()
+        assert removed == 3
+        # Memory is now empty
+        assert cleanup_tickers() == 0
+
+    def test_register_ticker_overwrites_same_key(self):
+        register_ticker("GAME1", {"signal": "BET"})
+        register_ticker("GAME1", {"signal": "PASS"})
+        removed = cleanup_tickers()
+        assert removed == 1
+
+
+# -- Null-Safe AdjEM Handling --
+
+class TestNullAdjEM:
+    def test_compute_metrics_null_fav(self):
+        result = compute_metrics(None, 12.0, -8.0)
+        assert result["ba_gap"] is None
+        assert result["abs_edge"] is None
+
+    def test_compute_metrics_null_dog(self):
+        result = compute_metrics(22.0, None, -8.0)
+        assert result["ba_gap"] is None
+        assert result["abs_edge"] is None
+
+    def test_compute_metrics_both_null(self):
+        result = compute_metrics(None, None, -8.0)
+        assert result["ba_gap"] is None
+        assert result["abs_edge"] is None
+
+    def test_classify_null_fav_returns_pass(self):
+        result = classify(None, 12.0, -8.0, 138)
+        assert result["signal"] == "PASS"
+        assert result["reason"] == "NullAdjEM"
+
+    def test_classify_null_dog_returns_pass(self):
+        result = classify(22.0, None, -8.0, 138)
+        assert result["signal"] == "PASS"
+        assert result["reason"] == "NullAdjEM"
+
+    def test_classify_null_preserves_spread_and_ou(self):
+        result = classify(None, None, -9.5, 145)
+        assert result["spread"] == -9.5
+        assert result["ou"] == 145
+
+    def test_classify_null_with_tournament_regime(self):
+        """Null guard fires before regime decay is applied."""
+        result = classify(None, 12.0, -8.0, 138, tournament_regime=True)
+        assert result["signal"] == "PASS"
+        assert result["reason"] == "NullAdjEM"
