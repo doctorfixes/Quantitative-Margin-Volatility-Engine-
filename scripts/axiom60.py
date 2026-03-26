@@ -55,3 +55,17 @@ def classify(fav_adj_em: float, dog_adj_em: float, spread: float, ou: float) -> 
         "spread": spread,
         "ou": ou,
     }
+
+
+def run_axiom60(game: dict) -> dict:
+    """
+    Convenience wrapper that accepts a game dict and returns classify() output.
+
+    Expected keys: ``fav_adj_em``, ``dog_adj_em``, ``spread``, ``ou``.
+    """
+    return classify(
+        fav_adj_em=game["fav_adj_em"],
+        dog_adj_em=game["dog_adj_em"],
+        spread=game["spread"],
+        ou=game["ou"],
+    )
